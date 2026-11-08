@@ -3,19 +3,30 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<meta name="theme-color" content="#14161a">
+<meta name="theme-color" content="#14161a" id="themeColor">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-title" content="Σινεμά">
 <title>Σινεμά Αθήνα — προβολές σήμερα</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%2314161a'/%3E%3Ccircle cx='16' cy='16' r='5' fill='%23fff'/%3E%3C/svg%3E">
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
 <style>
   :root{
+    color-scheme: light;
     --ink:#14161a; --ink-2:#5b6472; --ink-3:#67707d;
     --line:#e3e7ec; --line-2:#eef1f5; --bg:#fff; --bg-2:#f7f8fa;
+    --surface:#fff; --solid:#14161a; --solid-ink:#fff;
     --accent:#0b5fff; --accent-ink:#fff;
     --radius:12px; --shadow:0 1px 2px rgba(16,24,40,.06),0 1px 3px rgba(16,24,40,.1);
     /* measured at runtime so sticky offsets never drift from real header height */
     --bar:58px; --hdr:104px;
+  }
+  :root[data-theme="dark"]{
+    color-scheme: dark;
+    --ink:#e9edf3; --ink-2:#a2adbd; --ink-3:#8b95a4;
+    --line:#2b323b; --line-2:#1f252c; --bg:#0e1116; --bg-2:#171c23;
+    --surface:#171c23; --solid:#e9edf3; --solid-ink:#0e1116;
+    --accent:#5b9bff; --accent-ink:#0b1220;
+    --shadow:0 1px 2px rgba(0,0,0,.5),0 1px 3px rgba(0,0,0,.45);
   }
   *{box-sizing:border-box}
   html,body{margin:0;height:100%}
@@ -39,10 +50,16 @@
     width:100%;min-width:0;padding:9px 12px 9px 34px;border:1px solid var(--line);
     border-radius:10px;background:var(--bg-2);font:inherit;outline:none;
   }
-  .search input:focus{border-color:var(--accent);background:#fff;box-shadow:0 0 0 3px rgba(11,95,255,.12)}
+  .search input:focus{border-color:var(--accent);background:var(--surface);box-shadow:0 0 0 3px rgba(11,95,255,.12)}
   .search svg{position:absolute;left:11px;top:50%;transform:translateY(-50%);width:15px;height:15px;fill:var(--ink-3)}
   .count{margin-left:auto;color:var(--ink-2);font-size:13px;white-space:nowrap}
   .map-toggle{display:none}
+  .icon-btn{
+    display:inline-flex;align-items:center;justify-content:center;flex-shrink:0;
+    width:34px;height:34px;border-radius:9px;border:1px solid var(--line);
+    color:var(--ink-2);font-size:15px;line-height:1;
+  }
+  .icon-btn:hover{border-color:var(--ink-2);color:var(--ink)}
   .filters-done{display:none}
 
   /* ------------------------------------------------------------- day tabs */
@@ -54,7 +71,7 @@
     color:var(--ink-2);white-space:nowrap;border:1px solid transparent;
   }
   .day:hover{background:var(--bg-2)}
-  .day[aria-pressed="true"]{background:var(--ink);color:#fff}
+  .day[aria-pressed="true"]{background:var(--solid);color:var(--solid-ink)}
   .day small{opacity:.6;font-weight:400}
 
   /* ---------------------------------------------------------------- layout */
@@ -68,10 +85,10 @@
   .chipset{display:flex;flex-wrap:wrap;gap:6px}
   .chip{
     padding:5px 10px;border:1px solid var(--line);border-radius:999px;
-    font-size:13px;color:var(--ink-2);background:#fff;
+    font-size:13px;color:var(--ink-2);background:var(--surface);
   }
   .chip:hover{border-color:var(--ink-3)}
-  .chip[aria-pressed="true"]{background:var(--ink);border-color:var(--ink);color:#fff}
+  .chip[aria-pressed="true"]{background:var(--solid);border-color:var(--solid);color:var(--solid-ink)}
 
   /* dual time slider: two stacked range inputs sharing one track */
   .duo{position:relative;height:26px;margin:10px 2px 0}
@@ -83,23 +100,23 @@
   }
   .duo input[type=range]::-webkit-slider-thumb{
     -webkit-appearance:none;pointer-events:auto;width:16px;height:16px;border-radius:50%;
-    background:#fff;border:2px solid var(--ink);box-shadow:0 1px 3px rgba(16,24,40,.25);cursor:pointer;
+    background:var(--bg);border:2px solid var(--ink);box-shadow:0 1px 3px rgba(16,24,40,.25);cursor:pointer;
   }
   .duo input[type=range]::-moz-range-thumb{
-    pointer-events:auto;width:16px;height:16px;border-radius:50%;background:#fff;
+    pointer-events:auto;width:16px;height:16px;border-radius:50%;background:var(--bg);
     border:2px solid var(--ink);box-shadow:0 1px 3px rgba(16,24,40,.25);cursor:pointer;
   }
-  .duo input[type=range]:focus-visible::-webkit-slider-thumb{box-shadow:0 0 0 4px rgba(11,95,255,.25)}
+  .duo input[type=range]:focus-visible::-webkit-slider-thumb{box-shadow:0 0 0 4px color-mix(in srgb,var(--accent) 28%,transparent)}
   .duo-labels{display:flex;justify-content:space-between;font-size:12.5px;color:var(--ink-2);font-variant-numeric:tabular-nums;margin-top:2px}
   .duo-labels span[data-active]{color:var(--ink);font-weight:600}
   .fcheck{display:flex;align-items:center;gap:8px;padding:3px 0;font-size:13.5px;color:var(--ink-2);cursor:pointer}
   .fcheck input{accent-color:var(--ink);margin:0}
   select,input[type=number]{
     width:100%;padding:7px 9px;border:1px solid var(--line);border-radius:8px;
-    font:inherit;font-size:13.5px;background:#fff;color:var(--ink);outline:none;
+    font:inherit;font-size:13.5px;background:var(--surface);color:var(--ink);outline:none;
   }
   .two{display:grid;grid-template-columns:1fr 1fr;gap:8px}
-  .locbtn{width:100%;padding:8px;border:1px solid var(--line);border-radius:8px;font-size:13.5px;color:var(--ink-2);background:#fff}
+  .locbtn{width:100%;padding:8px;border:1px solid var(--line);border-radius:8px;font-size:13.5px;color:var(--ink-2);background:var(--surface)}
   .locbtn:hover{border-color:var(--ink-3)}
   .range{display:flex;align-items:center;gap:8px;font-size:12.5px;color:var(--ink-2)}
   input[type=range]{width:100%;accent-color:var(--ink)}
@@ -122,6 +139,11 @@
   .venue{display:flex;flex-wrap:wrap;align-items:center;gap:6px}
   .vname{font-size:13px;color:var(--ink);border-bottom:1px dotted var(--line);cursor:pointer}
   .vname:hover{border-color:var(--ink-2)}
+  .more{
+    align-self:flex-start;margin-top:2px;padding:3px 9px;border-radius:6px;
+    border:1px dashed var(--line);color:var(--ink-2);font-size:12.5px;
+  }
+  .more:hover{border-color:var(--ink-2);color:var(--ink)}
   .dist{font-size:12px;color:var(--ink-3)}
   .time{
     font-variant-numeric:tabular-nums;font-size:13px;padding:3px 8px;border-radius:6px;
@@ -131,12 +153,18 @@
   .time.sub::after{content:"Υ";margin-left:4px;font-size:10px;color:var(--ink-2)}
   .empty{padding:60px 20px;text-align:center;color:var(--ink-2)}
   .empty h2{font-size:17px;color:var(--ink);margin:0 0 6px}
-  .empty button{margin-top:14px;padding:9px 16px;border-radius:9px;background:var(--ink);color:#fff;font-size:13.5px}
+  .empty button{margin-top:14px;padding:9px 16px;border-radius:9px;background:var(--solid);color:var(--solid-ink);font-size:13.5px}
 
   /* ------------------------------------------------------------------- map */
   #mapwrap{position:sticky;top:var(--hdr);height:calc(100vh - var(--hdr));border-left:1px solid var(--line)}
   #map{height:100%;background:var(--bg-2)}
   .leaflet-popup-content{font-size:13px;line-height:1.4;margin:10px 12px}
+  .leaflet-popup-content-wrapper,.leaflet-popup-tip{background:var(--bg);color:var(--ink);box-shadow:var(--shadow)}
+  .leaflet-container a.leaflet-popup-close-button{color:var(--ink-2)}
+  .leaflet-control-attribution{background:color-mix(in srgb,var(--bg) 82%,transparent)!important;color:var(--ink-2)!important}
+  .leaflet-control-attribution a{color:var(--ink-2)!important}
+  .leaflet-bar a{background:var(--bg);color:var(--ink);border-color:var(--line)!important}
+  .leaflet-bar a:hover{background:var(--bg-2)}
   .leaflet-popup-content h4{margin:0 0 6px;font-size:13.5px}
   .leaflet-popup-content .prow{display:flex;justify-content:space-between;gap:10px;padding:2px 0}
   .leaflet-popup-content .prow span:last-child{color:var(--ink-2);font-variant-numeric:tabular-nums}
@@ -145,33 +173,45 @@
   .pin-wrap{background:none;border:0}
   .pin{
     width:24px;height:24px;border-radius:50%;
-    background:radial-gradient(circle at center,var(--ink) 0 6.5px,rgba(0,0,0,0) 7px);
+    background:radial-gradient(circle at center,var(--accent) 0 6.5px,rgba(0,0,0,0) 7px);
     filter:drop-shadow(0 1px 2px rgba(0,0,0,.45));
     transition:transform .12s;
   }
   .pin.on{
-    background:radial-gradient(circle at center,var(--accent) 0 8px,rgba(0,0,0,0) 8.5px);
-    transform:scale(1.15);
+    background:radial-gradient(circle at center,var(--solid) 0 8.5px,rgba(0,0,0,0) 9px);
+    transform:scale(1.2);
   }
 
   footer{grid-column:1/-1;padding:14px 20px;border-top:1px solid var(--line);color:var(--ink-3);font-size:12px}
 
   /* ---------------------------------------------------------------- mobile */
   @media (max-width:760px){
-    main{grid-template-columns:1fr}
-    .bar{padding:8px 14px;gap:10px;flex-wrap:wrap}
-    .brand{font-size:14px}
+    main{grid-template-columns:minmax(0,1fr)}
+    /* two rows: brand + actions, then full-width search */
+    .bar{
+      display:grid;padding:6px 14px;gap:6px;
+      grid-template-columns:auto 1fr auto auto auto;
+      grid-template-areas:"brand . filters theme map" "search search search search search";
+      align-items:center;
+    }
+    .brand{grid-area:brand;font-size:14px}
+    #themeToggle{grid-area:theme}
+    #filterToggle{grid-area:filters}
+    #mapToggle{grid-area:map;margin-left:0}
+    .search{grid-area:search;max-width:none;width:100%}
     .count{display:none}
     .server-count{display:none}
-    .results{padding:12px 14px 90px}
+    .results{padding:10px 14px 90px}
     .card{grid-template-columns:64px minmax(0,1fr);gap:11px}
     .poster{width:64px;height:94px}
     .time{padding:8px 12px}
+    .days-inner{padding:6px 14px}
+    .day{padding:6px 11px;font-size:13px}
     .map-toggle{
       display:inline-flex;align-items:center;gap:6px;padding:8px 13px;border-radius:999px;
-      background:var(--ink);color:#fff;font-size:13px;font-weight:500;margin-left:0;flex-shrink:0;
+      background:var(--solid);color:var(--solid-ink);font-size:13px;font-weight:500;margin-left:0;flex-shrink:0;
     }
-    .map-toggle.on{background:var(--accent)}
+    .map-toggle.on{background:var(--accent);color:var(--accent-ink)}
     #mapToggle{margin-left:auto}
 
     /* filters become a full-height sheet, not a hidden column */
@@ -205,6 +245,7 @@
       <input id="q" type="search" placeholder="Ταινία, πρωτότυπος τίτλος, σκηνοθέτης…" autocomplete="off">
     </div>
     <div class="count" id="count"></div>
+    <button class="icon-btn" id="themeToggle" title="Εναλλαγή θέματος" aria-label="Εναλλαγή φωτεινού/σκοτεινού θέματος">☾</button>
     <button class="map-toggle" id="filterToggle">Φίλτρα</button>
     <button class="map-toggle" id="mapToggle">Χάρτης</button>
   </div>
@@ -418,7 +459,7 @@
 
   // -------------------------------------------------------------- render
   let markers = new Map();
-  let map, layer;
+  let map, layer, baseLayer, refLayer;
 
   function render() {
     const entries = sortEntries(collect());
@@ -451,7 +492,7 @@
     if (f.genre) meta.push(`<span class="tag">${esc(f.genre)}</span>`);
     if (f.director) meta.push(esc(f.director));
 
-    const rows = venues.map(v => {
+    const venueRow = v => {
       const d = distance(v.hall);
       const times = v.times.slice()
         .sort((a, b) => (a.date + a.time).localeCompare(b.date + b.time))
@@ -463,7 +504,17 @@
         <span class="dist">${d != null ? d.toFixed(1).replace(".", ",") + " χλμ" : ""}</span>
         ${times}
       </div>`;
-    }).join("");
+    };
+
+    // one card can hold 20 halls; show the best few and let the rest expand
+    const MAX_VENUES = 3;
+    const head = venues.slice(0, MAX_VENUES);
+    const tail = venues.slice(MAX_VENUES);
+    const rows = head.map(venueRow).join("");
+    const moreRows = tail.length
+      ? `<div class="venues-rest" hidden>${tail.map(venueRow).join("")}</div>
+         <button class="more" data-expand>＋ ${tail.length} ${tail.length === 1 ? "αίθουσα" : "αίθουσες"}</button>`
+      : "";
 
     return `<article class="card" data-film="${f.id}">
       ${f.poster
@@ -473,7 +524,7 @@
         <h3 class="title"><a href="${esc(f.url)}" target="_blank" rel="noopener">${esc(f.title)}</a></h3>
         ${f.original && f.original !== f.title ? `<div class="orig">${esc(f.original)}</div>` : ""}
         <div class="meta">${meta.join("<span>·</span>")}</div>
-        <div class="venues">${rows}</div>
+        <div class="venues">${rows}${moreRows}</div>
       </div>
     </article>`;
   }
@@ -512,14 +563,46 @@
     map = L.map("map", { zoomControl: true, scrollWheelZoom: true, maxZoom: 16 }).setView([ATHENS.lat, ATHENS.lon], 12);
     // keyless Esri canvas tiles: OSM's volunteer servers 403 anything without a
     // Referer, which is exactly what a file:// page sends
-    const esri = "/ArcGIS/rest/services/Canvas/World_Light_Gray_";
-    L.tileLayer(`https://server.arcgisonline.com${esri}Base/MapServer/tile/{z}/{y}/{x}`, {
+    const base = "https://server.arcgisonline.com/ArcGIS/rest/services/Canvas";
+    baseLayer = L.tileLayer(`${base}/World_Light_Gray_Base/MapServer/tile/{z}/{y}/{x}`, {
       attribution: 'Tiles &copy; <a href="https://www.esri.com" target="_blank" rel="noopener">Esri</a>', maxZoom: 16,
     }).addTo(map);
-    L.tileLayer(`https://server.arcgisonline.com${esri}Reference/MapServer/tile/{z}/{y}/{x}`, {
+    refLayer = L.tileLayer(`${base}/World_Light_Gray_Reference/MapServer/tile/{z}/{y}/{x}`, {
       maxZoom: 16,
     }).addTo(map);
     layer = L.layerGroup().addTo(map);
+  }
+
+  function setTiles(dark) {
+    if (!baseLayer) return;
+    const kind = dark ? "World_Dark_Gray" : "World_Light_Gray";
+    const base = "https://server.arcgisonline.com/ArcGIS/rest/services/Canvas";
+    // recreate rather than setUrl: swapping the URL left stale tiles of the
+    // previous style in Leaflet's buffer, which showed as tone-shifted patches
+    map.removeLayer(baseLayer);
+    map.removeLayer(refLayer);
+    baseLayer = L.tileLayer(`${base}/${kind}_Base/MapServer/tile/{z}/{y}/{x}`, {
+      attribution: 'Tiles &copy; <a href="https://www.esri.com" target="_blank" rel="noopener">Esri</a>', maxZoom: 16,
+    }).addTo(map);
+    refLayer = L.tileLayer(`${base}/${kind}_Reference/MapServer/tile/{z}/{y}/{x}`, {
+      maxZoom: 16,
+    }).addTo(map);
+  }
+
+  // ------------------------------------------------------------------ theme
+  const THEME_KEY = "cinema-theme";
+
+  function applyTheme(t) {
+    document.documentElement.dataset.theme = t;
+    $("#themeToggle").textContent = t === "dark" ? "☀" : "☾";
+    $("#themeColor").setAttribute("content", t === "dark" ? "#0e1116" : "#14161a");
+    setTiles(t === "dark");
+  }
+
+  function initTheme() {
+    const saved = localStorage.getItem(THEME_KEY);
+    const dark = matchMedia("(prefers-color-scheme: dark)").matches;
+    applyTheme(saved || (dark ? "dark" : "light"));
   }
 
   function drawPins(pinHalls) {
@@ -646,6 +729,12 @@
 
   function wire() {
     window.addEventListener("resize", measureHeader);
+
+    $("#themeToggle").addEventListener("click", () => {
+      const next = document.documentElement.dataset.theme === "dark" ? "light" : "dark";
+      localStorage.setItem(THEME_KEY, next);
+      applyTheme(next);
+    });
     $("#dayTabs").addEventListener("click", ev => {
       const b = ev.target.closest("[data-day]");
       if (!b) return;
@@ -721,6 +810,12 @@
     });
 
     $("#results").addEventListener("click", ev => {
+      const more = ev.target.closest("[data-expand]");
+      if (more) {
+        more.closest(".card").querySelector(".venues-rest").hidden = false;
+        more.remove();
+        return;
+      }
       const relax = ev.target.closest("[data-relax]");
       if (relax) return resetSome(relax.dataset.relax);
       const v = ev.target.closest("[data-hall]");
@@ -810,6 +905,7 @@
 
   // ----------------------------------------------------------------- init
   initMap();
+  initTheme();
   buildGenres();
   buildAreas();
   applyDefaults();
