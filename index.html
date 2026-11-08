@@ -1,0 +1,825 @@
+<!doctype html>
+<html lang="el">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#14161a">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Σινεμά">
+<title>Σινεμά Αθήνα — προβολές σήμερα</title>
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+<style>
+  :root{
+    --ink:#14161a; --ink-2:#5b6472; --ink-3:#67707d;
+    --line:#e3e7ec; --line-2:#eef1f5; --bg:#fff; --bg-2:#f7f8fa;
+    --accent:#0b5fff; --accent-ink:#fff;
+    --radius:12px; --shadow:0 1px 2px rgba(16,24,40,.06),0 1px 3px rgba(16,24,40,.1);
+    /* measured at runtime so sticky offsets never drift from real header height */
+    --bar:58px; --hdr:104px;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;height:100%}
+  body{
+    font:15px/1.45 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif;
+    color:var(--ink);background:var(--bg);-webkit-font-smoothing:antialiased;
+  }
+  a{color:inherit;text-decoration:none}
+  button{font:inherit;color:inherit;background:none;border:0;cursor:pointer}
+
+  /* ---------------------------------------------------------------- header */
+  header{
+    position:sticky;top:0;z-index:30;background:var(--bg);
+    border-bottom:1px solid var(--line);
+  }
+  .bar{display:flex;align-items:center;gap:16px;padding:10px 20px;max-width:1560px;margin:0 auto}
+  .brand{font-weight:700;font-size:16px;letter-spacing:-.01em;white-space:nowrap;flex-shrink:0}
+  .brand span{color:var(--accent)}
+  .search{flex:1 1 0;min-width:0;max-width:420px;position:relative}
+  .search input{
+    width:100%;min-width:0;padding:9px 12px 9px 34px;border:1px solid var(--line);
+    border-radius:10px;background:var(--bg-2);font:inherit;outline:none;
+  }
+  .search input:focus{border-color:var(--accent);background:#fff;box-shadow:0 0 0 3px rgba(11,95,255,.12)}
+  .search svg{position:absolute;left:11px;top:50%;transform:translateY(-50%);width:15px;height:15px;fill:var(--ink-3)}
+  .count{margin-left:auto;color:var(--ink-2);font-size:13px;white-space:nowrap}
+  .map-toggle{display:none}
+  .filters-done{display:none}
+
+  /* ------------------------------------------------------------- day tabs */
+  .days{border-bottom:1px solid var(--line);background:var(--bg);position:sticky;top:var(--bar);z-index:29}
+  .days-inner{display:flex;gap:6px;padding:8px 20px;max-width:1560px;margin:0 auto;overflow-x:auto;scrollbar-width:none}
+  .days-inner::-webkit-scrollbar{display:none}
+  .day{
+    padding:7px 13px;border-radius:999px;font-size:13.5px;font-weight:500;
+    color:var(--ink-2);white-space:nowrap;border:1px solid transparent;
+  }
+  .day:hover{background:var(--bg-2)}
+  .day[aria-pressed="true"]{background:var(--ink);color:#fff}
+  .day small{opacity:.6;font-weight:400}
+
+  /* ---------------------------------------------------------------- layout */
+  main{display:grid;grid-template-columns:248px minmax(0,1fr) minmax(380px,44%);gap:0}
+  @media (max-width:1100px){ main{grid-template-columns:230px minmax(0,1fr)} #mapwrap{display:none} }
+
+  /* ---------------------------------------------------------------- filters */
+  aside{border-right:1px solid var(--line);padding:16px 16px 40px;max-height:calc(100vh - var(--hdr));overflow:auto;position:sticky;top:var(--hdr)}
+  .fgroup{margin-bottom:18px}
+  .fgroup h3{margin:0 0 8px;font-size:11.5px;text-transform:uppercase;letter-spacing:.06em;color:var(--ink-3)}
+  .chipset{display:flex;flex-wrap:wrap;gap:6px}
+  .chip{
+    padding:5px 10px;border:1px solid var(--line);border-radius:999px;
+    font-size:13px;color:var(--ink-2);background:#fff;
+  }
+  .chip:hover{border-color:var(--ink-3)}
+  .chip[aria-pressed="true"]{background:var(--ink);border-color:var(--ink);color:#fff}
+
+  /* dual time slider: two stacked range inputs sharing one track */
+  .duo{position:relative;height:26px;margin:10px 2px 0}
+  .duo-track{position:absolute;top:11px;left:0;right:0;height:4px;background:var(--line);border-radius:2px}
+  .duo-fill{position:absolute;top:0;bottom:0;background:var(--ink);border-radius:2px}
+  .duo input[type=range]{
+    position:absolute;top:0;left:0;width:100%;height:26px;margin:0;
+    background:none;-webkit-appearance:none;appearance:none;pointer-events:none;
+  }
+  .duo input[type=range]::-webkit-slider-thumb{
+    -webkit-appearance:none;pointer-events:auto;width:16px;height:16px;border-radius:50%;
+    background:#fff;border:2px solid var(--ink);box-shadow:0 1px 3px rgba(16,24,40,.25);cursor:pointer;
+  }
+  .duo input[type=range]::-moz-range-thumb{
+    pointer-events:auto;width:16px;height:16px;border-radius:50%;background:#fff;
+    border:2px solid var(--ink);box-shadow:0 1px 3px rgba(16,24,40,.25);cursor:pointer;
+  }
+  .duo input[type=range]:focus-visible::-webkit-slider-thumb{box-shadow:0 0 0 4px rgba(11,95,255,.25)}
+  .duo-labels{display:flex;justify-content:space-between;font-size:12.5px;color:var(--ink-2);font-variant-numeric:tabular-nums;margin-top:2px}
+  .duo-labels span[data-active]{color:var(--ink);font-weight:600}
+  .fcheck{display:flex;align-items:center;gap:8px;padding:3px 0;font-size:13.5px;color:var(--ink-2);cursor:pointer}
+  .fcheck input{accent-color:var(--ink);margin:0}
+  select,input[type=number]{
+    width:100%;padding:7px 9px;border:1px solid var(--line);border-radius:8px;
+    font:inherit;font-size:13.5px;background:#fff;color:var(--ink);outline:none;
+  }
+  .two{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+  .locbtn{width:100%;padding:8px;border:1px solid var(--line);border-radius:8px;font-size:13.5px;color:var(--ink-2);background:#fff}
+  .locbtn:hover{border-color:var(--ink-3)}
+  .range{display:flex;align-items:center;gap:8px;font-size:12.5px;color:var(--ink-2)}
+  input[type=range]{width:100%;accent-color:var(--ink)}
+  .reset{font-size:12.5px;color:var(--accent)}
+
+  /* ----------------------------------------------------------------- cards */
+  .results{padding:16px 20px 80px;min-width:0}
+  .card{
+    display:grid;grid-template-columns:86px minmax(0,1fr);gap:14px;
+    padding:14px 0;border-bottom:1px solid var(--line-2);
+  }
+  .card:hover .poster{box-shadow:var(--shadow)}
+  .poster{width:86px;height:126px;border-radius:8px;object-fit:cover;background:var(--bg-2);transition:box-shadow .15s}
+  .title{margin:0;font-size:16px;font-weight:650;letter-spacing:-.01em;line-height:1.25}
+  .orig{color:var(--ink-3);font-size:13px;margin-top:1px}
+  .meta{display:flex;flex-wrap:wrap;align-items:center;gap:8px;margin-top:6px;font-size:12.5px;color:var(--ink-2)}
+  .stars{color:#b8860b;font-weight:600}
+  .tag{border:1px solid var(--line);border-radius:5px;padding:1px 6px;font-size:11.5px;color:var(--ink-2)}
+  .venues{margin-top:10px;display:flex;flex-direction:column;gap:7px}
+  .venue{display:flex;flex-wrap:wrap;align-items:center;gap:6px}
+  .vname{font-size:13px;color:var(--ink);border-bottom:1px dotted var(--line);cursor:pointer}
+  .vname:hover{border-color:var(--ink-2)}
+  .dist{font-size:12px;color:var(--ink-3)}
+  .time{
+    font-variant-numeric:tabular-nums;font-size:13px;padding:3px 8px;border-radius:6px;
+    background:var(--bg-2);border:1px solid var(--line-2);color:var(--ink);
+  }
+  .time.dub::after{content:"Μ";margin-left:4px;font-size:10px;color:var(--ink-2)}
+  .time.sub::after{content:"Υ";margin-left:4px;font-size:10px;color:var(--ink-2)}
+  .empty{padding:60px 20px;text-align:center;color:var(--ink-2)}
+  .empty h2{font-size:17px;color:var(--ink);margin:0 0 6px}
+  .empty button{margin-top:14px;padding:9px 16px;border-radius:9px;background:var(--ink);color:#fff;font-size:13.5px}
+
+  /* ------------------------------------------------------------------- map */
+  #mapwrap{position:sticky;top:var(--hdr);height:calc(100vh - var(--hdr));border-left:1px solid var(--line)}
+  #map{height:100%;background:var(--bg-2)}
+  .leaflet-popup-content{font-size:13px;line-height:1.4;margin:10px 12px}
+  .leaflet-popup-content h4{margin:0 0 6px;font-size:13.5px}
+  .leaflet-popup-content .prow{display:flex;justify-content:space-between;gap:10px;padding:2px 0}
+  .leaflet-popup-content .prow span:last-child{color:var(--ink-2);font-variant-numeric:tabular-nums}
+
+  /* 24px hit area, ~13px visual dot: pin size is a tap target, not a glyph */
+  .pin-wrap{background:none;border:0}
+  .pin{
+    width:24px;height:24px;border-radius:50%;
+    background:radial-gradient(circle at center,var(--ink) 0 6.5px,rgba(0,0,0,0) 7px);
+    filter:drop-shadow(0 1px 2px rgba(0,0,0,.45));
+    transition:transform .12s;
+  }
+  .pin.on{
+    background:radial-gradient(circle at center,var(--accent) 0 8px,rgba(0,0,0,0) 8.5px);
+    transform:scale(1.15);
+  }
+
+  footer{grid-column:1/-1;padding:14px 20px;border-top:1px solid var(--line);color:var(--ink-3);font-size:12px}
+
+  /* ---------------------------------------------------------------- mobile */
+  @media (max-width:760px){
+    main{grid-template-columns:1fr}
+    .bar{padding:8px 14px;gap:10px;flex-wrap:wrap}
+    .brand{font-size:14px}
+    .count{display:none}
+    .server-count{display:none}
+    .results{padding:12px 14px 90px}
+    .card{grid-template-columns:64px minmax(0,1fr);gap:11px}
+    .poster{width:64px;height:94px}
+    .time{padding:8px 12px}
+    .map-toggle{
+      display:inline-flex;align-items:center;gap:6px;padding:8px 13px;border-radius:999px;
+      background:var(--ink);color:#fff;font-size:13px;font-weight:500;margin-left:0;flex-shrink:0;
+    }
+    .map-toggle.on{background:var(--accent)}
+    #mapToggle{margin-left:auto}
+
+    /* filters become a full-height sheet, not a hidden column */
+    aside{
+      display:none;position:fixed;inset:var(--hdr) 0 0;z-index:26;border:0;
+      max-height:none;background:var(--bg);overflow:auto;padding:0 16px 90px;
+    }
+    body.filters-open aside{display:block}
+    body.filters-open .results{display:none}
+    .filters-done{
+      display:block;position:sticky;top:0;z-index:2;width:100%;
+      padding:12px;margin:0 -16px 10px;width:calc(100% + 32px);background:var(--bg);
+      border-bottom:1px solid var(--line);font-size:14px;font-weight:600;color:var(--accent);text-align:center;
+    }
+
+    #mapwrap{
+      display:none;position:fixed;inset:var(--hdr) 0 0;height:auto;z-index:25;border:0;
+    }
+    body.map-open #mapwrap{display:block}
+    body.map-open .results,body.map-open aside{display:none}
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="bar">
+    <div class="brand">σινεμ<span>ά</span></div>
+    <div class="search">
+      <svg viewBox="0 0 24 24"><path d="M10 18a8 8 0 1 1 5.3-2L21 21.7 19.7 23l-5.6-5.6A8 8 0 0 1 10 18zm0-2a6 6 0 1 0 0-12 6 6 0 0 0 0 12z"/></svg>
+      <input id="q" type="search" placeholder="Ταινία, πρωτότυπος τίτλος, σκηνοθέτης…" autocomplete="off">
+    </div>
+    <div class="count" id="count"></div>
+    <button class="map-toggle" id="filterToggle">Φίλτρα</button>
+    <button class="map-toggle" id="mapToggle">Χάρτης</button>
+  </div>
+  <div class="days"><div class="days-inner" id="dayTabs"></div></div>
+</header>
+
+<main>
+  <aside>
+    <button class="filters-done" id="filtersDone">Τέλος</button>
+    <div class="fgroup">
+      <h3>Ώρα προβολής</h3>
+      <div class="duo">
+        <div class="duo-track"><div class="duo-fill" id="timeFill"></div></div>
+        <input type="range" id="timeFrom" min="0" max="1440" step="5" aria-label="Από ώρα">
+        <input type="range" id="timeTo" min="0" max="1440" step="5" aria-label="Έως ώρα">
+      </div>
+      <div class="duo-labels">
+        <span id="fromLabel">00:00</span>
+        <span id="toLabel">23:59</span>
+      </div>
+      <label class="fcheck" id="upcomingWrap" style="margin-top:8px">
+        <input type="checkbox" id="upcoming" checked> Μόνο επερχόμενες
+      </label>
+    </div>
+
+    <div class="fgroup">
+      <h3>Γλώσσα</h3>
+      <div class="chipset" id="lang">
+        <button class="chip" data-v="">Όλες</button>
+        <button class="chip" data-v="dubbed">Μεταγλωττισμένα</button>
+        <button class="chip" data-v="subtitled">Με υπότιτλους</button>
+      </div>
+    </div>
+
+    <div class="fgroup">
+      <h3>Είδος</h3>
+      <div id="genres"></div>
+    </div>
+
+    <div class="fgroup">
+      <h3>Τοποθεσία</h3>
+      <div class="chipset" style="margin-bottom:8px">
+        <button class="chip" id="nearMe">📍 Η θέση μου</button>
+      </div>
+      <div class="range" style="margin-bottom:6px">
+        <span>0</span>
+        <input type="range" id="radius" min="0" max="30" step="1" value="0">
+        <span id="radiusLabel">παντού</span>
+      </div>
+      <select id="area"><option value="">Όλες οι περιοχές</option></select>
+    </div>
+
+    <div class="fgroup">
+      <h3>Ταινία</h3>
+      <div class="two" style="margin-bottom:8px">
+        <input type="number" id="yearMin" placeholder="Από" min="1900" max="2100">
+        <input type="number" id="yearMax" placeholder="Έως" min="1900" max="2100">
+      </div>
+      <div class="two">
+        <select id="minRating">
+          <option value="0">Βαθμός: όλοι</option>
+          <option value="2.5">★ 2,5+</option>
+          <option value="3">★ 3+</option>
+          <option value="3.5">★ 3,5+</option>
+          <option value="4">★ 4+</option>
+        </select>
+        <select id="maxDuration">
+          <option value="999">Διάρκεια: όλες</option>
+          <option value="90">έως 90′</option>
+          <option value="120">έως 2 ώρες</option>
+          <option value="150">έως 2,5 ώρες</option>
+        </select>
+      </div>
+    </div>
+
+    <div class="fgroup">
+      <h3>Σειρά</h3>
+      <select id="sort">
+        <option value="soonest">Πιο σύντομα</option>
+        <option value="nearest">Πιο κοντά</option>
+        <option value="rating">Βαθμολογία</option>
+        <option value="title">Τίτλος</option>
+      </select>
+    </div>
+
+    <button class="reset" id="reset">Καθαρισμός φίλτρων</button>
+  </aside>
+
+  <section class="results" id="results"></section>
+  <div id="mapwrap"><div id="map"></div></div>
+
+  <footer>
+    Δεδομένα: <a href="https://www.athinorama.gr/cinema/guide/" target="_blank" rel="noopener">athinorama.gr</a>
+    <span id="fetched"></span> · Οι ώρες είναι ενδεικτικές, επιβεβαίωσε με το ταμείο.
+  </footer>
+</main>
+
+<script src="data.js"></script>
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script>
+(() => {
+  const D = window.DATA;
+  const HALL = Object.fromEntries(D.halls.map(h => [h.id, h]));
+  const FILM = Object.fromEntries(D.films.map(f => [f.id, f]));
+  const ATHENS = { lat: 37.9838, lon: 23.7275 };
+
+  const $ = s => document.querySelector(s);
+  const esc = s => (s ?? "").replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+
+  const todayISO = () => {
+    const d = new Date();
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+  };
+  const nowHM = () => {
+    const d = new Date();
+    return `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
+  };
+  const toMin = hm => Number(hm.slice(0, 2)) * 60 + Number(hm.slice(3, 5));
+  const toHM = m => m >= 1440 ? "23:59" : `${String(Math.floor(m / 60)).padStart(2, "0")}:${String(m % 60).padStart(2, "0")}`;
+  const WEEKDAY = ["Κυρ", "Δευ", "Τρι", "Τετ", "Πεμ", "Παρ", "Σαβ"];
+  const MONTH = ["Ιαν", "Φεβ", "Μαρ", "Απρ", "Μαϊ", "Ιουν", "Ιουλ", "Αυγ", "Σεπ", "Οκτ", "Νοε", "Δεκ"];
+  const fmtDay = iso => {
+    const d = new Date(iso + "T12:00:00");
+    return { wd: WEEKDAY[d.getDay()], md: d.getDate() + " " + MONTH[d.getMonth()] };
+  };
+
+  // ------------------------------------------------------------- state
+  const state = {
+    day: "all", fromMin: 0, toMin: 1440, lang: "", genres: new Set(),
+    yearMin: null, yearMax: null, minRating: 0, maxDuration: 999,
+    area: "", radiusKm: 0, origin: null,
+    q: "", sort: "soonest", upcoming: true,
+  };
+
+  // ---------------------------------------------------------- geometry
+  const R = 6371;
+  const rad = d => d * Math.PI / 180;
+  function distance(hall) {
+    if (!state.origin || hall.lat == null) return null;
+    const dLat = rad(hall.lat - state.origin.lat), dLon = rad(hall.lon - state.origin.lon);
+    const a = Math.sin(dLat / 2) ** 2 +
+      Math.cos(rad(state.origin.lat)) * Math.cos(rad(hall.lat)) * Math.sin(dLon / 2) ** 2;
+    return 2 * R * Math.asin(Math.sqrt(a));
+  }
+
+  // ------------------------------------------------------------ filters
+  const dates = [...new Set(D.showings.map(s => s.date))].sort();
+
+  function filmOK(f, st = state) {
+    if (st.genres.size && !st.genres.has(f.genre)) return false;
+    if (st.yearMin && (f.year ?? 0) < st.yearMin) return false;
+    if (st.yearMax && (f.year ?? 9999) > st.yearMax) return false;
+    if (st.minRating && (f.rating ?? 0) < st.minRating) return false;
+    if (st.maxDuration < 999 && (f.duration ?? 999) > st.maxDuration) return false;
+    if (st.q) {
+      const hay = [f.title, f.original, f.director].filter(Boolean).join(" ").toLowerCase();
+      if (!hay.includes(st.q.toLowerCase())) return false;
+    }
+    return true;
+  }
+
+  function showingOK(s, st = state) {
+    if (st.day !== "all" && s.date !== st.day) return false;
+    if (st.fromMin > 0 || st.toMin < 1440) {
+      const m = toMin(s.time);
+      if (m < st.fromMin || m > st.toMin) return false;
+    }
+    if (st.day === todayISO() && st.upcoming && s.time < nowHM()) return false;
+    if (st.lang && s.language !== st.lang) return false;
+    const h = HALL[s.hallId];
+    if (!h) return false;
+    if (st.area && h.area !== st.area) return false;
+    if (st.radiusKm) {
+      const d = distance(h);
+      if (d == null || d > st.radiusKm) return false;
+    }
+    return true;
+  }
+
+  function collect(st = state) {
+    const keep = new Map();
+    for (const s of D.showings) {
+      const f = FILM[s.filmId], h = HALL[s.hallId];
+      if (!f || !h || !showingOK(s, st) || !filmOK(f, st)) continue;
+      if (!keep.has(f.id)) keep.set(f.id, { film: f, venues: new Map(), n: 0 });
+      const entry = keep.get(f.id);
+      if (!entry.venues.has(h.id)) entry.venues.set(h.id, { hall: h, times: [] });
+      entry.venues.get(h.id).times.push(s);
+      entry.n++;
+    }
+    return [...keep.values()];
+  }
+
+  const minKey = e => [...e.venues.values()]
+    .flatMap(v => v.times.map(t => t.date + t.time))
+    .reduce((m, k) => (k < m ? k : m), "9999");
+  const bestDist = e => {
+    const ds = [...e.venues.values()].map(v => distance(v.hall)).filter(d => d != null);
+    return ds.length ? Math.min(...ds) : null;
+  };
+
+  function sortEntries(list) {
+    const by = {
+      soonest: (a, b) => minKey(a).localeCompare(minKey(b)),
+      nearest: (a, b) => (bestDist(a) ?? 1e9) - (bestDist(b) ?? 1e9),
+      rating: (a, b) => (b.film.rating ?? 0) - (a.film.rating ?? 0),
+      title: (a, b) => a.film.title.localeCompare(b.film.title, "el"),
+    }[state.sort];
+    return list.sort(by);
+  }
+
+  // -------------------------------------------------------------- render
+  let markers = new Map();
+  let map, layer;
+
+  function render() {
+    const entries = sortEntries(collect());
+    const nShow = entries.reduce((a, e) => a + e.n, 0);
+    $("#count").textContent = entries.length
+      ? `${entries.length} ταινίες · ${nShow} προβολές`
+      : "καμία προβολή";
+
+    $("#results").innerHTML = entries.length ? entries.map(cardHTML).join("") : emptyHTML();
+
+    const pinHalls = new Map();
+    entries.forEach(e => e.venues.forEach((v, id) => pinHalls.set(id, v.hall)));
+    drawPins(pinHalls);
+    updateFilterBadge();
+    syncURL();
+  }
+
+  function cardHTML(e) {
+    const f = e.film;
+    const tkey = v => v.times.reduce((m, t) => ((t.date + t.time) < m ? t.date + t.time : m), "9999");
+    const venues = [...e.venues.values()].sort((a, b) => {
+      if (state.sort === "nearest") return (distance(a.hall) ?? 1e9) - (distance(b.hall) ?? 1e9);
+      return tkey(a).localeCompare(tkey(b));
+    });
+
+    const meta = [];
+    if (f.rating) meta.push(`<span class="stars">★ ${f.rating.toFixed(1).replace(".", ",")}</span>`);
+    if (f.year) meta.push(esc(String(f.year)));
+    if (f.duration) meta.push(`${f.duration}′`);
+    if (f.genre) meta.push(`<span class="tag">${esc(f.genre)}</span>`);
+    if (f.director) meta.push(esc(f.director));
+
+    const rows = venues.map(v => {
+      const d = distance(v.hall);
+      const times = v.times.slice()
+        .sort((a, b) => (a.date + a.time).localeCompare(b.date + b.time))
+        .map(t => `<span class="time ${t.language === "dubbed" ? "dub" : t.language === "subtitled" ? "sub" : ""}"
+                          title="${esc(v.hall.name)} · ${esc(t.time)}${t.language ? " · " + (t.language === "dubbed" ? "μεταγλωττισμένο" : "με υπότιτλους") : ""}">${t.time}</span>`)
+        .join("");
+      return `<div class="venue">
+        <span class="vname" data-hall="${v.hall.id}">${esc(v.hall.name)}</span>
+        <span class="dist">${d != null ? d.toFixed(1).replace(".", ",") + " χλμ" : ""}</span>
+        ${times}
+      </div>`;
+    }).join("");
+
+    return `<article class="card" data-film="${f.id}">
+      ${f.poster
+        ? `<img class="poster" src="${esc(f.poster)}" alt="" loading="lazy">`
+        : `<div class="poster"></div>`}
+      <div>
+        <h3 class="title"><a href="${esc(f.url)}" target="_blank" rel="noopener">${esc(f.title)}</a></h3>
+        ${f.original && f.original !== f.title ? `<div class="orig">${esc(f.original)}</div>` : ""}
+        <div class="meta">${meta.join("<span>·</span>")}</div>
+        <div class="venues">${rows}</div>
+      </div>
+    </article>`;
+  }
+
+  function emptyHTML() {
+    const relaxes = [
+      ["time", `Τίποτα ${toHM(state.fromMin)}–${toHM(state.toMin)}`, "Άνοιξε όλη τη μέρα"],
+      ["lang", "Καμία προβολή με αυτή τη γλώσσα", "Δείξε όλες τις γλώσσες"],
+      ["radius", "Τίποτα σε αυτή την ακτίνα", "Μεγάλωσε την ακτίνα"],
+      ["area", "Τίποτα σε αυτή την περιοχή", "Όλες οι περιοχές"],
+      ["day", "Τίποτα αυτή τη μέρα", "Όλες τις μέρες"],
+      ["genres", "Κανένα ταινία με αυτά τα είδη", "Όλα τα είδη"],
+      ["q", "Τίποτα για αυτή την αναζήτηση", "Καθάρισε την αναζήτηση"],
+    ];
+    for (const [key, msg, label] of relaxes) {
+      const trial = { ...state, genres: new Set(state.genres) };
+      if (key === "time") { trial.fromMin = 0; trial.toMin = 1440; }
+      if (key === "lang") trial.lang = "";
+      if (key === "radius") trial.radiusKm = 0;
+      if (key === "area") trial.area = "";
+      if (key === "day") trial.day = "all";
+      if (key === "genres") trial.genres = new Set();
+      if (key === "q") trial.q = "";
+      if (collect(trial).length) {
+        return `<div class="empty"><h2>${esc(msg)}</h2>
+          <p>Δοκίμασε να χαλαρώσεις ένα φίλτρο.</p>
+          <button data-relax="${key}">${esc(label)}</button></div>`;
+      }
+    }
+    return `<div class="empty"><h2>Καμία προβολή</h2><p>Δεν βρέθηκε τίποτα με αυτούς τους συνδυασμούς.</p>
+      <button data-relax="all">Καθαρισμός φίλτρων</button></div>`;
+  }
+
+  // ----------------------------------------------------------------- map
+  function initMap() {
+    map = L.map("map", { zoomControl: true, scrollWheelZoom: true, maxZoom: 16 }).setView([ATHENS.lat, ATHENS.lon], 12);
+    // keyless Esri canvas tiles: OSM's volunteer servers 403 anything without a
+    // Referer, which is exactly what a file:// page sends
+    const esri = "/ArcGIS/rest/services/Canvas/World_Light_Gray_";
+    L.tileLayer(`https://server.arcgisonline.com${esri}Base/MapServer/tile/{z}/{y}/{x}`, {
+      attribution: 'Tiles &copy; <a href="https://www.esri.com" target="_blank" rel="noopener">Esri</a>', maxZoom: 16,
+    }).addTo(map);
+    L.tileLayer(`https://server.arcgisonline.com${esri}Reference/MapServer/tile/{z}/{y}/{x}`, {
+      maxZoom: 16,
+    }).addTo(map);
+    layer = L.layerGroup().addTo(map);
+  }
+
+  function drawPins(pinHalls) {
+    if (!map) return;
+    layer.clearLayers();
+    markers = new Map();
+    const bounds = [];
+    pinHalls.forEach((h, id) => {
+      if (h.lat == null) return;
+      const m = L.marker([h.lat, h.lon], {
+        icon: L.divIcon({ className: "pin-wrap", html: '<div class="pin"></div>', iconSize: [24, 24], iconAnchor: [12, 12] }),
+        title: h.name, riseOnHover: true,
+      });
+      m.bindPopup(popupHTML(h, id), { closeButton: true, maxWidth: 260 });
+      m.addTo(layer);
+      markers.set(id, m);
+      bounds.push([h.lat, h.lon]);
+    });
+    if (state.radiusKm && state.origin) {
+      L.circle([state.origin.lat, state.origin.lon], {
+        radius: state.radiusKm * 1000, color: "#0b5fff", weight: 1, fillOpacity: .04,
+      }).addTo(layer);
+      bounds.push([state.origin.lat, state.origin.lon]);
+    }
+    if (bounds.length && !state._keepView) map.fitBounds(bounds, { padding: [30, 30], maxZoom: 14 });
+    state._keepView = false;
+  }
+
+  function popupHTML(h) {
+    const rows = D.showings
+      .filter(s => s.hallId === h.id && showingOK(s))
+      .sort((a, b) => (a.date + a.time).localeCompare(b.date + b.time))
+      .slice(0, 8)
+      .map(s => `<div class="prow"><span>${esc(FILM[s.filmId].title)}</span><span>${s.time}</span></div>`)
+      .join("");
+    return `<h4>${esc(h.name)}</h4>
+      <div style="color:var(--ink-2);font-size:12px;margin-bottom:6px">${esc(h.address || "")}</div>
+      ${rows || "<div style='color:var(--ink-2)'>καμία προβολή στα φίλτρα</div>"}`;
+  }
+
+  // --------------------------------------------------------------- events
+  function setPressed(container, value) {
+    container.querySelectorAll("[data-v]").forEach(b =>
+      b.setAttribute("aria-pressed", String(b.dataset.v === value)));
+  }
+
+  function updateTimeUI() {
+    const { fromMin: a, toMin: b } = state;
+    const pct = m => (m / 1440) * 100;
+    $("#timeFrom").value = a;
+    $("#timeTo").value = b;
+    $("#fromLabel").textContent = toHM(a);
+    $("#toLabel").textContent = toHM(b);
+    $("#timeFill").style.left = pct(a) + "%";
+    $("#timeFill").style.width = (pct(b) - pct(a)) + "%";
+    // keep both thumbs grabbable at either end of the track
+    $("#timeFrom").style.zIndex = a > 720 ? 4 : 2;
+    $("#timeTo").style.zIndex = 3;
+  }
+
+  function measureHeader() {    const header = document.querySelector("header");
+    const days = document.querySelector(".days");
+    const root = document.documentElement.style;
+    root.setProperty("--bar", (header.offsetHeight - days.offsetHeight) + "px");
+    root.setProperty("--hdr", header.offsetHeight + "px");
+  }
+
+  function buildDayTabs() {
+    const today = todayISO();
+    const tabs = [`<button class="day" data-day="all" aria-pressed="${state.day === "all"}">Όλες</button>`];
+    for (const d of dates) {
+      const { wd, md } = fmtDay(d);
+      const label = d === today ? `Σήμερα <small>${md}</small>` : `${wd} <small>${md}</small>`;
+      tabs.push(`<button class="day" data-day="${d}" aria-pressed="${state.day === d}">${label}</button>`);
+    }
+    $("#dayTabs").innerHTML = tabs.join("");
+    $("#upcomingWrap").style.display = state.day === today ? "" : "none";
+    measureHeader();
+  }
+
+  function buildGenres() {
+    const counts = new Map();
+    D.films.forEach(f => f.genre && counts.set(f.genre, (counts.get(f.genre) || 0) + 1));
+    $("#genres").innerHTML = [...counts.entries()].sort((a, b) => b[1] - a[1])
+      .map(([g, n]) => `<label class="fcheck"><input type="checkbox" value="${esc(g)}"> ${esc(g)} <span style="color:var(--ink-2)">(${n})</span></label>`)
+      .join("");
+  }
+
+  function buildAreas() {
+    const areas = [...new Set(D.halls.map(h => h.area).filter(Boolean))].sort();
+    $("#area").innerHTML = `<option value="">Όλες οι περιοχές</option>` +
+      areas.map(a => `<option value="${esc(a)}">${esc(a)}</option>`).join("");
+  }
+
+  // URL state: ?day=&t=from-to&lang=&genre=&area=&r=&lat=&lon=&q=
+  function syncURL() {
+    const p = new URLSearchParams();
+    if (state.day !== "all") p.set("day", state.day);
+    if (state.fromMin > 0 || state.toMin < 1440) p.set("t", `${state.fromMin}-${state.toMin}`);
+    if (state.lang) p.set("lang", state.lang);
+    if (state.genres.size) p.set("genre", [...state.genres].join("|"));
+    if (state.area) p.set("area", state.area);
+    if (state.radiusKm) { p.set("r", state.radiusKm); if (state.origin) { p.set("lat", state.origin.lat.toFixed(4)); p.set("lon", state.origin.lon.toFixed(4)); } }
+    if (state.q) p.set("q", state.q);
+    if (state.sort !== "soonest") p.set("sort", state.sort);
+    history.replaceState(null, "", p.toString() ? "?" + p : location.pathname);
+  }
+
+  function readURL() {
+    const p = new URLSearchParams(location.search);
+    if (p.get("day")) state.day = p.get("day");
+    if (p.get("t")) {
+      const [a, b] = p.get("t").split("-").map(Number);
+      if (Number.isFinite(a) && Number.isFinite(b) && a <= b) { state.fromMin = a; state.toMin = b; }
+    }
+    if (p.get("lang")) state.lang = p.get("lang");
+    if (p.get("genre")) p.get("genre").split("|").forEach(g => state.genres.add(g));
+    if (p.get("area")) state.area = p.get("area");
+    if (p.get("q")) state.q = p.get("q");
+    if (p.get("sort")) state.sort = p.get("sort");
+    const r = Number(p.get("r")), lat = Number(p.get("lat")), lon = Number(p.get("lon"));
+    if (r > 0 && lat && lon) { state.radiusKm = r; state.origin = { lat, lon }; }
+  }
+
+  function wire() {
+    window.addEventListener("resize", measureHeader);
+    $("#dayTabs").addEventListener("click", ev => {
+      const b = ev.target.closest("[data-day]");
+      if (!b) return;
+      state.day = b.dataset.day;
+      buildDayTabs();
+      render();
+    });
+
+    $("#lang").addEventListener("click", ev => {
+      const b = ev.target.closest("[data-v]");
+      if (!b) return;
+      state.lang = b.dataset.v;
+      setPressed($("#lang"), state.lang);
+      render();
+    });
+
+    // dual time slider: clamp so the thumbs can't cross
+    const onTime = which => ev => {
+      const v = Number(ev.target.value);
+      if (which === "from") state.fromMin = Math.min(v, state.toMin);
+      else state.toMin = Math.max(v, state.fromMin);
+      updateTimeUI();
+      render();
+    };
+    $("#timeFrom").addEventListener("input", onTime("from"));
+    $("#timeTo").addEventListener("input", onTime("to"));
+
+    $("#genres").addEventListener("change", ev => {
+      const v = ev.target.value;
+      if (ev.target.checked) state.genres.add(v); else state.genres.delete(v);
+      render();
+    });
+
+    let t;
+    $("#q").addEventListener("input", ev => {
+      clearTimeout(t);
+      t = setTimeout(() => { state.q = ev.target.value.trim(); render(); }, 120);
+    });
+
+    $("#area").addEventListener("change", ev => { state.area = ev.target.value; render(); });
+    $("#minRating").addEventListener("change", ev => { state.minRating = Number(ev.target.value); render(); });
+    $("#maxDuration").addEventListener("change", ev => { state.maxDuration = Number(ev.target.value); render(); });
+    $("#sort").addEventListener("change", ev => { state.sort = ev.target.value; render(); });
+    $("#upcoming").addEventListener("change", ev => { state.upcoming = ev.target.checked; render(); });
+
+    ["#yearMin", "#yearMax"].forEach(sel => $(sel).addEventListener("change", ev => {
+      const v = Number(ev.target.value) || null;
+      if (sel === "#yearMin") state.yearMin = v; else state.yearMax = v;
+      render();
+    }));
+
+    const radiusLabel = () => {
+      $("#radiusLabel").textContent = state.radiusKm ? state.radiusKm + " χλμ" : "παντού";
+    };
+    $("#radius").addEventListener("input", ev => {
+      state.radiusKm = Number(ev.target.value);
+      if (state.radiusKm && !state.origin) state.origin = { lat: ATHENS.lat, lon: ATHENS.lon, label: "Αθήνα" };
+      radiusLabel();
+      state._keepView = true;
+      render();
+    });
+
+    $("#nearMe").addEventListener("click", () => {
+      if (!navigator.geolocation) return;
+      navigator.geolocation.getCurrentPosition(pos => {
+        state.origin = { lat: pos.coords.latitude, lon: pos.coords.longitude };
+        state.radiusKm = state.radiusKm || 3;
+        $("#radius").value = state.radiusKm;
+        radiusLabel();
+        map && map.setView([state.origin.lat, state.origin.lon], 14);
+        render();
+      }, () => alert("Δεν μπόρεσα να διαβάσω τη θέση σου."));
+    });
+
+    $("#results").addEventListener("click", ev => {
+      const relax = ev.target.closest("[data-relax]");
+      if (relax) return resetSome(relax.dataset.relax);
+      const v = ev.target.closest("[data-hall]");
+      if (v && map) {
+        const h = HALL[v.dataset.hall];
+        if (!h || h.lat == null) return;
+        map.setView([h.lat, h.lon], 15);
+        markers.get(h.id)?.openPopup();
+      }
+    });
+
+    $("#results").addEventListener("mouseover", ev => {
+      const v = ev.target.closest("[data-hall]");
+      if (!v) return;
+      markers.forEach((m, id) => m.getElement()?.querySelector(".pin")?.classList.toggle("on", id === v.dataset.hall));
+    });
+    $("#results").addEventListener("mouseout", () => {
+      markers.forEach(m => m.getElement()?.querySelector(".pin")?.classList.remove("on"));
+    });
+
+    $("#reset").addEventListener("click", () => { applyDefaults(); render(); });
+
+    $("#filterToggle").addEventListener("click", () => {
+      document.body.classList.remove("map-open");
+      document.body.classList.toggle("filters-open");
+      if (document.body.classList.contains("filters-open")) window.scrollTo(0, 0);
+    });
+    $("#filtersDone").addEventListener("click", () => {
+      document.body.classList.remove("filters-open");
+    });
+
+    $("#mapToggle").addEventListener("click", () => {
+      document.body.classList.remove("filters-open");
+      document.body.classList.toggle("map-open");
+      if (document.body.classList.contains("map-open")) setTimeout(() => map && map.invalidateSize(), 60);
+    });
+  }
+
+  function updateFilterBadge() {
+    const active = state.fromMin > 0 || state.toMin < 1440 || state.lang ||
+      state.genres.size || state.yearMin || state.yearMax || state.minRating ||
+      state.maxDuration < 999 || state.area || state.radiusKm || state.q;
+    $("#filterToggle").classList.toggle("on", Boolean(active));
+  }
+
+  function resetSome(key) {
+    if (key === "all") return applyDefaults();
+    if (key === "time") { state.fromMin = 0; state.toMin = 1440; }
+    if (key === "lang") state.lang = "";
+    if (key === "radius") state.radiusKm = 0;
+    if (key === "area") state.area = "";
+    if (key === "day") state.day = "all";
+    if (key === "genres") state.genres = new Set();
+    if (key === "q") state.q = "";
+    syncControls();
+    render();
+  }
+
+  function syncControls() {
+    setPressed($("#lang"), state.lang);
+    updateTimeUI();
+    $("#q").value = state.q;
+    $("#area").value = state.area;
+    $("#minRating").value = String(state.minRating);
+    $("#maxDuration").value = String(state.maxDuration);
+    $("#sort").value = state.sort;
+    $("#yearMin").value = state.yearMin ?? "";
+    $("#yearMax").value = state.yearMax ?? "";
+    $("#radius").value = state.radiusKm;
+    $("#radiusLabel").textContent = state.radiusKm ? state.radiusKm + " χλμ" : "παντού";
+    document.querySelectorAll("#genres input").forEach(i => { i.checked = state.genres.has(i.value); });
+    buildDayTabs();
+  }
+
+  function applyDefaults() {
+    state.day = dates.includes(todayISO()) ? todayISO() : "all";
+    state.fromMin = 0; state.toMin = 1440;
+    state.lang = "";
+    state.genres = new Set();
+    state.yearMin = state.yearMax = null;
+    state.minRating = 0; state.maxDuration = 999;
+    state.area = ""; state.radiusKm = 0; state.origin = null;
+    state.q = ""; state.sort = "soonest"; state.upcoming = true;
+    $("#upcoming").checked = true;
+    syncControls();
+  }
+
+  // ----------------------------------------------------------------- init
+  initMap();
+  buildGenres();
+  buildAreas();
+  applyDefaults();
+  readURL();
+  syncControls();
+  wire();
+  $("#fetched").textContent = "· ενημέρωση " + new Date(D.fetchedAt).toLocaleString("el-GR", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" });
+  render();
+  if (state.origin) { state._keepView = false; }
+})();
+</script>
+</body>
+</html>
