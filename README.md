@@ -1,5 +1,7 @@
 # Σινεμά Αθήνα
 
+https://sdaveas.github.io/athens-cinema/
+
 Static showtimes browser for Athens cinemas. No backend, no build step.
 
 - `index.html` — the whole UI (vanilla JS + Leaflet from CDN)
