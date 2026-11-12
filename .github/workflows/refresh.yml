@@ -2,7 +2,13 @@ name: refresh data
 
 on:
   schedule:
-    - cron: "17 3 * * *"   # 03:17 UTC = 05:17 Athens
+    # athinorama rolls Thu->Wed and publishes the new week at 07:00 Athens
+    # (verified: six consecutive weekly review posts, all Thu 07:00:00).
+    # Scraping before that date just re-saves the old week.
+    # 08:00 UTC = 10:00 Athens in winter (EET), 11:00 in summer (EEST).
+    - cron: "0 8 * * 4"
+    # noon Athens backup, if the first run lands early or dies
+    - cron: "0 10 * * 4"
   workflow_dispatch:
 
 permissions:
