@@ -263,6 +263,16 @@ def parse_guide(page: str):
 COORD_RE = re.compile(r'"latitude":"(-?[\d.]+)","longitude":"(-?[\d.]+)"')
 
 
+def previous_counts():
+    """(films, showings) from the committed data.js, or None on a fresh clone."""
+    try:
+        raw = open("data.js", encoding="utf-8").read()
+        prev = json.loads(raw[raw.index("{"):raw.rindex("}") + 1])
+    except (OSError, ValueError):
+        return None
+    return len(prev["films"]), len(prev["showings"])
+
+
 def coord_is_sane(lat, lon):
     return lat is not None and lon is not None and (36.0 < lat < 40.0 and 22.0 < lon < 24.5)
 
@@ -388,8 +398,14 @@ def main():
 
     # ------------------------------------------------------- self check
     assert len(halls) == 38, f"expected 38 halls, got {len(halls)}"
-    assert len(films) >= 70, f"too few films: {len(films)}"
-    assert 2000 <= len(showings) <= 4500, f"showing count out of range: {len(showings)}"
+    # counts drift week to week (68-70 films, 1.9k-2.2k showings), so partial
+    # scrapes are caught by comparing with last week, not a fixed number
+    prev = previous_counts()
+    assert len(films) >= 30, f"too few films: {len(films)}"
+    assert 1000 <= len(showings) <= 6000, f"showing count out of range: {len(showings)}"
+    if prev:
+        assert len(films) >= 0.85 * prev[0], f"films collapsed: {prev[0]} → {len(films)}"
+        assert len(showings) >= 0.80 * prev[1], f"showings collapsed: {prev[1]} → {len(showings)}"
     assert parse_times("Πέμ.-Τετ. : 20.00")[0][0][0] == ALL_DAYS, "Πέμ.-Τετ. != all 7 days"
     assert parse_times("Κυρ., Δευτ. 17.20")[0][0][0] == {"Sun", "Mon"}, "comma day list broken"
     assert parse_times("Πέμ. Δευτ. 20.00")[0][0][0] == {"Thu", "Mon"}, "space day list broken"
