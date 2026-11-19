@@ -5,11 +5,14 @@ on:
     # athinorama rolls Thu->Wed and publishes the new week at 07:00 Athens
     # (verified: six consecutive weekly review posts, all Thu 07:00:00).
     # Scraping before that date just re-saves the old week.
-    # 06:00 UTC = 08:00 Athens in winter (EET, UTC+2), 09:00 in summer (EEST, UTC+3):
+    # 06:17 UTC = 08:17 Athens in winter (EET, UTC+2), 09:17 in summer (EEST, UTC+3):
     # one hour after the 07:00 roll in winter, two in summer.
-    - cron: "0 6 * * 4"
-    # 10:00 Athens follow-up, in case the first run lands early or dies
-    - cron: "0 8 * * 4"
+    # off-minute on purpose: the top of the hour is when the scheduler queue is
+    # most congested and drop-prone (github docs, "scheduled workflows running at
+    # unexpected times")
+    - cron: "17 6 * * 4"
+    # 10:23 Athens follow-up, in case the first run lands early or dies
+    - cron: "23 8 * * 4"
   workflow_dispatch:
 
 permissions:
